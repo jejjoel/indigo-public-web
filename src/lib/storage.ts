@@ -5,10 +5,12 @@ import type {
   SubmissionData,
   SubmissionInput,
   PublicSubmissionReceipt,
+  ContactMessageData,
 } from "../types/submission";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "submissions.json");
+const CONTACT_FILE = path.join(DATA_DIR, "contact_messages.json");
 // Direktori privat di luar folder public/ — tidak memiliki URL publik sama sekali
 const PRIVATE_PITCHDECK_DIR = path.join(DATA_DIR, "pitch-decks");
 
@@ -217,3 +219,54 @@ export async function createPublicSubmission(
     pitchdeckFileName: newSubmission.pitchdeckFileName,
   };
 }
+
+/**
+ * WRITE-ONLY CONTACT SERVICE (Khusus Halaman /contact di indigo-public-web)
+ * Menyimpan pesan kolaborasi ke tabel contact_messages untuk dibaca Admin di /inbox.
+ */
+export async function createPublicContactMessage(input: {
+  fullName: string;
+  email: string;
+  message: string;
+}): Promise<{ id: string; createdAt: string }> {
+  ensurePrivateDirectories();
+
+  const id = `msg-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+  const createdAt = new Date().toISOString();
+
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    const { error } = await supabase.from("contact_messages").insert({
+      full_name: input.fullName,
+      email: input.email,
+      message: input.message,
+      is_read: false,
+    });
+    if (error) {
+      console.error("Supabase contact insert warning:", error.message);
+    }
+  }
+
+  const newMsg: ContactMessageData = {
+    id,
+    fullName: input.fullName,
+    email: input.email,
+    message: input.message,
+    isRead: false,
+    createdAt,
+  };
+
+  try {
+    let existing: ContactMessageData[] = [];
+    if (fs.existsSync(CONTACT_FILE)) {
+      existing = JSON.parse(fs.readFileSync(CONTACT_FILE, "utf-8"));
+    }
+    const updated = [newMsg, ...(Array.isArray(existing) ? existing : [])];
+    fs.writeFileSync(CONTACT_FILE, JSON.stringify(updated, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Warning: Gagal menyimpan contact_messages.json:", err);
+  }
+
+  return { id, createdAt };
+}
+

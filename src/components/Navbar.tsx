@@ -1,9 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Gamepad2, Sparkles } from "lucide-react";
 
+const NAV_ITEMS = [
+  { label: "Home", href: "/" },
+  { label: "About", href: "/about" },
+  { label: "Startups", href: "/startups" },
+  { label: "Contact", href: "/contact" },
+];
+
 export default function Navbar() {
+  const pathname = usePathname();
+
   return (
     <header className="sticky top-0 z-50 bg-[#0b0c10]/90 backdrop-blur-md border-b border-[#252b3b]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -27,27 +37,32 @@ export default function Navbar() {
           </div>
         </Link>
 
-        {/* Navigation links (Public Only — Zero Admin Footprint) */}
-        <nav className="flex items-center gap-2 sm:gap-4">
+        {/* Navigation links (Sesuai Blueprint: /, /about, /startups, /contact, /submit) */}
+        <nav className="flex items-center gap-1 sm:gap-3">
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`text-xs sm:text-sm font-medium px-2.5 sm:px-3 py-1.5 rounded-md transition-colors ${
+                  isActive
+                    ? "text-white bg-white/10 font-bold"
+                    : "text-gray-300 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+
           <Link
-            href="/"
-            className="text-xs sm:text-sm font-medium text-gray-300 hover:text-white px-2 sm:px-3 py-1.5 rounded-md hover:bg-white/5 transition-colors"
+            href="/submit"
+            className="ml-1 inline-flex items-center gap-1.5 text-xs sm:text-sm font-extrabold bg-[#F3E000] hover:bg-[#F2A900] text-black px-3.5 py-1.5 rounded-md transition-all shadow-md shadow-[#F3E000]/20"
           >
-            Beranda
+            <Sparkles className="w-3.5 h-3.5 text-[#E71C34]" />
+            Submit your game
           </Link>
-          <a
-            href="/#form-section"
-            className="text-xs sm:text-sm font-medium text-gray-300 hover:text-white px-2 sm:px-3 py-1.5 rounded-md hover:bg-white/5 transition-colors"
-          >
-            Formulir Intake
-          </a>
-          <a
-            href="/#form-section"
-            className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-bold bg-[#E71C34] hover:bg-[#D3182E] text-white px-3.5 py-1.5 rounded-md transition-colors shadow-md shadow-[#E71C34]/25"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#F3E000]" />
-            Submit Your Game
-          </a>
         </nav>
       </div>
     </header>

@@ -62,3 +62,13 @@ export interface PublicSubmissionReceipt {
   targetPlatform: string;
   pitchdeckFileName: string;
 }
+
+export interface ContactMessageData {
+  id: string;
+  fullName: string;
+  email: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
