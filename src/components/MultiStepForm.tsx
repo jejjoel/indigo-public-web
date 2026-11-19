@@ -14,7 +14,6 @@ import {
   Link as LinkIcon,
   Send,
   Loader2,
-  Copy,
   Lock,
   RotateCcw,
   X,
@@ -107,7 +106,6 @@ export default function MultiStepForm() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submittedReceipt, setSubmittedReceipt] =
     useState<PublicSubmissionReceipt | null>(null);
-  const [copiedId, setCopiedId] = useState(false);
 
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [pitchdeckFile, setPitchdeckFile] = useState<File | null>(null);
@@ -412,12 +410,6 @@ export default function MultiStepForm() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(true);
-    setTimeout(() => setCopiedId(false), 2000);
-  };
-
   const fieldCardClass = (fieldName: string) =>
     `bg-[#0b0c10] border rounded-xl p-4 transition-all ${
       fieldErrors[fieldName]
@@ -456,26 +448,13 @@ export default function MultiStepForm() {
           <strong className="text-white">Indigo Game Intake Program</strong> telah tersimpan aman di sistem kami.
         </p>
 
-        {/* Reference Box */}
+        {/* Summary Box */}
         <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-5 mb-6 text-left">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-400 font-semibold uppercase">
-              Nomor Tiket / Kode Registrasi
-            </span>
-            <button
-              type="button"
-              onClick={() => copyToClipboard(submittedReceipt.registrationCode)}
-              className="flex items-center gap-1 text-xs text-[#F2A900] hover:underline"
-            >
-              <Copy className="w-3.5 h-3.5" />
-              {copiedId ? "Tersalin!" : "Salin Kode"}
-            </button>
-          </div>
-          <div className="font-mono text-lg font-extrabold text-[#F3E000] bg-[#141721] p-3 rounded-lg border border-[#252b3b] select-all tracking-wider">
-            {submittedReceipt.registrationCode}
-          </div>
+          <span className="block text-xs text-[#F2A900] font-bold uppercase tracking-wider mb-3">
+            Ringkasan Data Terkirim
+          </span>
 
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
             <div>
               <span className="text-gray-500">Nama Team Startup:</span>{" "}
               <span className="text-gray-200 font-semibold">
@@ -506,7 +485,7 @@ export default function MultiStepForm() {
           <div className="mt-4 pt-3 border-t border-[#252b3b] flex items-center gap-2 text-xs text-amber-400">
             <Lock className="w-4 h-4 shrink-0" />
             <span>
-              Dokumen Pitch Deck (<strong>{submittedReceipt.pitchdeckFileName}</strong>) telah dikunci di penyimpanan privat dan <strong>hanya dapat dilihat oleh Tim Admin &amp; Kurator Indigo Game</strong>.
+              Dokumen Pitch Deck (<strong>{submittedReceipt.pitchdeckFileName}</strong>) telah dikunci di penyimpanan privat dan <strong>hanya dapat dilihat oleh Tim Admin Indigo Game</strong>.
             </span>
           </div>
         </div>
