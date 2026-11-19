@@ -86,7 +86,7 @@ export default function ContactPage() {
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#E71C34] hover:bg-[#D3182E] text-white text-xs font-bold transition-all"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-[#F3E000]" />
-                  Buka Formulir Intake (/submit)
+                  Buka Formulir Pendaftaran
                 </Link>
               </div>
 

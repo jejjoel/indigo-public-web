@@ -42,7 +42,7 @@ const STAGES = [
     title: "Intake & Curated Selection",
     duration: "Bulan 1",
     points: [
-      "Pengiriman formulir 5 tahap & dokumen Pitch Deck PDF melalui portal /submit.",
+      "Pengiriman formulir 5 tahap & dokumen Pitch Deck PDF melalui portal pendaftaran resmi.",
       "Kurasi awal kelayakan tim (WNI, Captable >= 65%, pilar Art/Programming/Design).",
       "Evaluasi playable vertical slice & sesi pitching bersama tim mentor.",
     ],
