@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   CheckCircle2,
   AlertCircle,
@@ -90,22 +90,62 @@ const INITIAL_FORM_STATE = {
   teaserVideoUrl: "",
   gameDemoUrl: "",
 
-  // Halaman 5 dari 5: Preference
+  // Halaman 5 dari 5: Preference & Konfirmasi Akhir
   referralSource: "Website Indigo",
   customReferral: "",
+  confirmFinalSubmit: false,
 };
+
+const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+const PHONE_REGEX = /^(?:\+62|62|0)[0-9]{8,13}$/;
+const LINKEDIN_REGEX = /^https?:\/\/([a-z]{2,3}\.)?linkedin\.com\/.+/i;
 
 export default function MultiStepForm() {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submittedReceipt, setSubmittedReceipt] =
     useState<PublicSubmissionReceipt | null>(null);
   const [copiedId, setCopiedId] = useState(false);
 
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [pitchdeckFile, setPitchdeckFile] = useState<File | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const formTopRef = useRef<HTMLDivElement | null>(null);
+
+  // 1. Otomatis scroll ke paling atas form setiap kali berpindah langkah (Next / Prev / Submit Success)
+  useEffect(() => {
+    if (formTopRef.current) {
+      const yOffset = -90; // Memberi ruang untuk sticky navbar
+      const y =
+        formTopRef.current.getBoundingClientRect().top +
+        window.pageYOffset +
+        yOffset;
+      window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [currentStep, submittedReceipt]);
+
+  // 3. Fungsi untuk otomatis scroll & fokus langsung ke field pertama yang salah / belum terisi
+  const scrollToInvalidField = (fieldName: string) => {
+    setTimeout(() => {
+      const container = document.querySelector(
+        `[data-field="${fieldName}"]`
+      ) as HTMLElement | null;
+      if (container) {
+        container.scrollIntoView({ behavior: "smooth", block: "center" });
+        const input = container.querySelector(
+          "input, textarea, select"
+        ) as HTMLElement | null;
+        if (input && input.getAttribute("type") !== "file") {
+          input.focus({ preventScroll: true });
+        }
+      }
+    }, 50);
+  };
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -118,6 +158,13 @@ export default function MultiStepForm() {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
     setErrorMsg(null);
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => {
+        const copy = { ...prev };
+        delete copy[name];
+        return copy;
+      });
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,17 +172,28 @@ export default function MultiStepForm() {
     if (!file) return;
 
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setErrorMsg("Upload 1 file yang didukung: PDF. Hanya dokumen .pdf yang diterima.");
+      const msg = "Upload 1 file yang didukung: PDF. Hanya dokumen .pdf yang diterima.";
+      setErrorMsg(msg);
+      setFieldErrors({ pitchdeckFile: msg });
+      scrollToInvalidField("pitchdeckFile");
       return;
     }
 
     if (file.size > 100 * 1024 * 1024) {
-      setErrorMsg("Ukuran file maksimal adalah 100 MB.");
+      const msg = "Ukuran file maksimal adalah 100 MB.";
+      setErrorMsg(msg);
+      setFieldErrors({ pitchdeckFile: msg });
+      scrollToInvalidField("pitchdeckFile");
       return;
     }
 
     setPitchdeckFile(file);
     setErrorMsg(null);
+    setFieldErrors((prev) => {
+      const copy = { ...prev };
+      delete copy.pitchdeckFile;
+      return copy;
+    });
   };
 
   const removeSelectedFile = () => {
@@ -149,96 +207,151 @@ export default function MultiStepForm() {
     setFormData(INITIAL_FORM_STATE);
     removeSelectedFile();
     setErrorMsg(null);
+    setFieldErrors({});
     setCurrentStep(1);
   };
 
   const validateStep = (step: number): boolean => {
     setErrorMsg(null);
+    const errors: Record<string, string> = {};
+    let firstInvalidField: string | null = null;
+
+    const addError = (field: string, message: string) => {
+      if (!errors[field]) {
+        errors[field] = message;
+      }
+      if (!firstInvalidField) {
+        firstInvalidField = field;
+      }
+    };
+
     if (step === 1) {
       if (!formData.agreedToTerms) {
-        setErrorMsg(
-          "Anda wajib menyetujui kriteria Game Startup untuk mengikuti program Indigo Game Intake."
+        addError(
+          "agreedToTerms",
+          "Anda wajib mencentang persetujuan kriteria Game Startup untuk melanjutkan."
         );
-        return false;
       }
     } else if (step === 2) {
       if (!formData.leaderName.trim()) {
-        setErrorMsg("Nama Lengkap Game Director (Leader) wajib diisi.");
-        return false;
+        addError("leaderName", "Nama Lengkap Game Director (Leader) wajib diisi.");
       }
       if (!formData.leaderRole.trim()) {
-        setErrorMsg("Role wajib diisi (Contoh: Game Director / Game Programming).");
-        return false;
+        addError("leaderRole", "Role wajib diisi (Contoh: Game Director / Game Programming).");
       }
       if (!formData.leaderLinkedin.trim()) {
-        setErrorMsg("LinkedIn Game Director (Leader) wajib diisi.");
-        return false;
+        addError("leaderLinkedin", "LinkedIn Game Director (Leader) wajib diisi.");
+      } else if (!LINKEDIN_REGEX.test(formData.leaderLinkedin.trim())) {
+        addError(
+          "leaderLinkedin",
+          "Format link LinkedIn tidak valid. Gunakan format seperti https://linkedin.com/in/username"
+        );
       }
-      if (!formData.leaderEmail.trim() || !formData.leaderEmail.includes("@")) {
-        setErrorMsg("Email Game Director (Leader) wajib diisi dengan format yang valid.");
-        return false;
+      if (!formData.leaderEmail.trim()) {
+        addError("leaderEmail", "Email Game Director (Leader) wajib diisi.");
+      } else if (!EMAIL_REGEX.test(formData.leaderEmail.trim())) {
+        addError(
+          "leaderEmail",
+          "Format email tidak valid. Contoh format yang benar: nama@studio.com"
+        );
       }
-      if (!formData.leaderWhatsapp.trim()) {
-        setErrorMsg("No Whatsapp Game Director (Leader) wajib diisi.");
-        return false;
+      const cleanPhone = formData.leaderWhatsapp.replace(/[\s-]/g, "");
+      if (!cleanPhone) {
+        addError("leaderWhatsapp", "No Whatsapp Game Director (Leader) wajib diisi.");
+      } else if (!PHONE_REGEX.test(cleanPhone)) {
+        addError(
+          "leaderWhatsapp",
+          "Format nomor WhatsApp tidak valid. Gunakan angka diawali 08... atau +628... (10-15 digit)."
+        );
       }
     } else if (step === 3) {
       if (!formData.startupName.trim()) {
-        setErrorMsg("Nama Team Game Startup wajib diisi.");
-        return false;
+        addError("startupName", "Nama Team Game Startup wajib diisi.");
       }
       if (!formData.dateFormed) {
-        setErrorMsg("Tanggal Kapan Team Game Startup dibentuk wajib diisi.");
-        return false;
+        addError("dateFormed", "Tanggal pembentukan Team Game Startup wajib diisi.");
       }
       if (!formData.location.trim()) {
-        setErrorMsg("Lokasi Team Game Startup wajib diisi.");
-        return false;
+        addError("location", "Lokasi Team Game Startup wajib diisi.");
       }
       if (!formData.startupWebsite.trim()) {
-        setErrorMsg("Website Game Startup (Website / itch.io page / Steam page) wajib diisi.");
-        return false;
+        addError(
+          "startupWebsite",
+          "Website Game Startup (Website / itch.io page / Steam page) wajib diisi."
+        );
       }
       if (formData.gameGenre === "Yang lain" && !formData.customGenre.trim()) {
-        setErrorMsg("Harap tuliskan genre game Anda pada kolom 'Yang lain'.");
-        return false;
+        addError("gameGenre", "Harap tuliskan genre game Anda pada kolom 'Yang lain'.");
+      }
+      if (formData.inCommunity === "Ya" && !formData.communityName.trim()) {
+        addError(
+          "communityName",
+          "Karena Anda memilih 'Ya', sebutkan nama komunitas game developer yang diikuti."
+        );
       }
       if (!formData.otherPrograms.trim()) {
-        setErrorMsg(
+        addError(
+          "otherPrograms",
           "Pertanyaan program lain wajib diisi. Apabila tidak pernah, isi dengan '-'."
         );
-        return false;
       }
     } else if (step === 4) {
       if (!pitchdeckFile) {
-        setErrorMsg("Pitchdeck Startup (file PDF, maks 100 MB) wajib diunggah.");
-        return false;
+        addError(
+          "pitchdeckFile",
+          "Pitchdeck Startup (file PDF, maks 100 MB) wajib diunggah sebelum melanjutkan."
+        );
       }
     } else if (step === 5) {
       if (
         formData.referralSource === "Yang lain" &&
         !formData.customReferral.trim()
       ) {
-        setErrorMsg("Harap tuliskan sumber informasi pada kolom 'Yang lain'.");
-        return false;
+        addError(
+          "referralSource",
+          "Harap tuliskan sumber informasi pada kolom 'Yang lain'."
+        );
+      }
+      if (!formData.confirmFinalSubmit) {
+        addError(
+          "confirmFinalSubmit",
+          "Harap centang konfirmasi akhir bahwa seluruh data pendaftaran Anda sudah benar sebelum mengirim."
+        );
       }
     }
+
+    setFieldErrors(errors);
+
+    if (firstInvalidField) {
+      setErrorMsg(errors[firstInvalidField]);
+      scrollToInvalidField(firstInvalidField);
+      return false;
+    }
+
     return true;
   };
 
-  const nextStep = () => {
+  // 2. Mencegah event click tombol "Berikutnya" di Step 4 ikut men-trigger tombol "Kirim" di Step 5
+  const nextStep = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (validateStep(currentStep)) {
       setCurrentStep((prev) => Math.min(prev + 1, 5));
     }
   };
 
-  const prevStep = () => {
+  const prevStep = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
     setErrorMsg(null);
+    setFieldErrors({});
     setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Hanya boleh submit jika sedang berada di Halaman 5 dan lolos validasi konfirmasi akhir
+    if (currentStep !== 5) return;
     if (!validateStep(5) || !pitchdeckFile) return;
 
     setLoading(true);
@@ -305,10 +418,28 @@ export default function MultiStepForm() {
     setTimeout(() => setCopiedId(false), 2000);
   };
 
-  // SUCCESS VIEW (USER PUBLIK HANYA MENERIMA KODE REGISTRASI, PITCH DECK TERKUNCI UNTUK ADMIN)
+  const fieldCardClass = (fieldName: string) =>
+    `bg-[#0b0c10] border rounded-xl p-4 transition-all ${
+      fieldErrors[fieldName]
+        ? "border-[#E71C34] ring-2 ring-[#E71C34]/30"
+        : "border-[#252b3b]"
+    }`;
+
+  const renderFieldError = (fieldName: string) =>
+    fieldErrors[fieldName] ? (
+      <p className="mt-2 text-xs text-red-400 flex items-center gap-1.5 font-medium">
+        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+        <span>{fieldErrors[fieldName]}</span>
+      </p>
+    ) : null;
+
+  // SUCCESS VIEW
   if (submittedReceipt) {
     return (
-      <div className="bg-[#141721] border border-[#252b3b] rounded-2xl p-6 sm:p-10 shadow-2xl text-center max-w-2xl mx-auto">
+      <div
+        ref={formTopRef}
+        className="bg-[#141721] border border-[#252b3b] rounded-2xl p-6 sm:p-10 shadow-2xl text-center max-w-2xl mx-auto"
+      >
         <div className="w-16 h-16 bg-[#E71C34]/20 border border-[#E71C34] rounded-full flex items-center justify-center mx-auto mb-6 text-[#E71C34]">
           <CheckCircle2 className="w-10 h-10" />
         </div>
@@ -397,7 +528,10 @@ export default function MultiStepForm() {
   }
 
   return (
-    <div className="bg-[#141721] border border-[#252b3b] rounded-2xl shadow-2xl overflow-hidden max-w-4xl mx-auto">
+    <div
+      ref={formTopRef}
+      className="bg-[#141721] border border-[#252b3b] rounded-2xl shadow-2xl overflow-hidden max-w-4xl mx-auto"
+    >
       {/* Top Banner Header (Sesuai Judul Resmi Form) */}
       <div className="bg-gradient-to-r from-[#700B1C] via-[#BC1428] to-[#E71C34] p-6 text-white">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
@@ -473,19 +607,8 @@ export default function MultiStepForm() {
         </div>
       </div>
 
-      {/* Error alert if any */}
-      {errorMsg && (
-        <div className="mx-6 mt-6 p-4 rounded-xl bg-red-950/60 border border-red-800 text-red-200 flex items-start gap-3 text-xs sm:text-sm">
-          <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold">Periksa kembali isian formulir Anda:</p>
-            <p>{errorMsg}</p>
-          </div>
-        </div>
-      )}
-
       {/* Form Content */}
-      <form onSubmit={handleSubmit} className="p-6 sm:p-8">
+      <form onSubmit={handleSubmit} noValidate className="p-6 sm:p-8">
         {/* ===================================================================
             HALAMAN 1 DARI 5: KRITERIA & KETENTUAN INTAKE
            =================================================================== */}
@@ -546,19 +669,25 @@ export default function MultiStepForm() {
               </div>
             </div>
 
-            <label className="flex items-start gap-3 p-4 rounded-xl border border-[#252b3b] bg-[#0b0c10] hover:border-[#E71C34]/50 cursor-pointer transition-colors">
-              <input
-                type="checkbox"
-                name="agreedToTerms"
-                checked={formData.agreedToTerms}
-                onChange={handleChange}
-                className="mt-1 w-4 h-4 rounded text-[#E71C34] bg-gray-900 border-gray-700 focus:ring-[#E71C34]"
-              />
-              <span className="text-xs sm:text-sm text-gray-200">
-                Saya dan tim telah membaca serta memenuhi seluruh kriteria Game Startup untuk mengikuti program Indigo Game Intake di atas.{" "}
-                <span className="text-[#E71C34] font-bold">*</span>
-              </span>
-            </label>
+            <div
+              data-field="agreedToTerms"
+              className={fieldCardClass("agreedToTerms")}
+            >
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="agreedToTerms"
+                  checked={formData.agreedToTerms}
+                  onChange={handleChange}
+                  className="mt-1 w-4 h-4 rounded text-[#E71C34] bg-gray-900 border-gray-700 focus:ring-[#E71C34]"
+                />
+                <span className="text-xs sm:text-sm text-gray-200">
+                  Saya dan tim telah membaca serta memenuhi seluruh kriteria Game Startup untuk mengikuti program Indigo Game Intake di atas.{" "}
+                  <span className="text-[#E71C34] font-bold">*</span>
+                </span>
+              </label>
+              {renderFieldError("agreedToTerms")}
+            </div>
           </div>
         )}
 
@@ -575,7 +704,10 @@ export default function MultiStepForm() {
             </div>
 
             {/* 1. Nama Lengkap Game Director (Leader) */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div
+              data-field="leaderName"
+              className={fieldCardClass("leaderName")}
+            >
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-2">
                 Nama Lengkap Game Director (Leader){" "}
                 <span className="text-[#E71C34]">*</span>
@@ -588,10 +720,14 @@ export default function MultiStepForm() {
                 placeholder="Jawaban Anda"
                 className="w-full bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#E71C34] transition-colors"
               />
+              {renderFieldError("leaderName")}
             </div>
 
             {/* 2. Role */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div
+              data-field="leaderRole"
+              className={fieldCardClass("leaderRole")}
+            >
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-0.5">
                 Role <span className="text-[#E71C34]">*</span>
               </label>
@@ -606,10 +742,14 @@ export default function MultiStepForm() {
                 placeholder="Jawaban Anda"
                 className="w-full bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#E71C34] transition-colors"
               />
+              {renderFieldError("leaderRole")}
             </div>
 
             {/* 3. LinkedIn Game Director (Leader) */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div
+              data-field="leaderLinkedin"
+              className={fieldCardClass("leaderLinkedin")}
+            >
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-0.5">
                 LinkedIn Game Director (Leader){" "}
                 <span className="text-[#E71C34]">*</span>
@@ -625,6 +765,7 @@ export default function MultiStepForm() {
                 placeholder="https://linkedin.com/in/..."
                 className="w-full bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#E71C34] transition-colors"
               />
+              {renderFieldError("leaderLinkedin")}
             </div>
 
             {/* 4. Comitment Game Director (Leader) */}
@@ -660,7 +801,10 @@ export default function MultiStepForm() {
             </div>
 
             {/* 5. Email Game Director (Leader) */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div
+              data-field="leaderEmail"
+              className={fieldCardClass("leaderEmail")}
+            >
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-2">
                 Email Game Director (Leader){" "}
                 <span className="text-[#E71C34]">*</span>
@@ -670,13 +814,17 @@ export default function MultiStepForm() {
                 name="leaderEmail"
                 value={formData.leaderEmail}
                 onChange={handleChange}
-                placeholder="Jawaban Anda"
+                placeholder="nama@studio.com"
                 className="w-full bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#E71C34] transition-colors"
               />
+              {renderFieldError("leaderEmail")}
             </div>
 
             {/* 6. No Whatsapp Game Director (Leader) */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div
+              data-field="leaderWhatsapp"
+              className={fieldCardClass("leaderWhatsapp")}
+            >
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-2">
                 No Whatsapp Game Director (Leader){" "}
                 <span className="text-[#E71C34]">*</span>
@@ -689,6 +837,7 @@ export default function MultiStepForm() {
                 placeholder="08xxxxxxxxxx"
                 className="w-full bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#E71C34] transition-colors"
               />
+              {renderFieldError("leaderWhatsapp")}
             </div>
 
             {/* 7. Captable */}
@@ -732,7 +881,10 @@ export default function MultiStepForm() {
             </div>
 
             {/* 1. Nama Team Game Startup */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div
+              data-field="startupName"
+              className={fieldCardClass("startupName")}
+            >
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-2">
                 Nama Team Game Startup <span className="text-[#E71C34]">*</span>
               </label>
@@ -744,10 +896,14 @@ export default function MultiStepForm() {
                 placeholder="Jawaban Anda"
                 className="w-full bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#E71C34] transition-colors"
               />
+              {renderFieldError("startupName")}
             </div>
 
             {/* 2. Kapan Team Game Startup dibentuk */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div
+              data-field="dateFormed"
+              className={fieldCardClass("dateFormed")}
+            >
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-1">
                 Kapan Team Game Startup dibentuk{" "}
                 <span className="text-[#E71C34]">*</span>
@@ -760,10 +916,11 @@ export default function MultiStepForm() {
                 onChange={handleChange}
                 className="w-full sm:w-64 bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#E71C34] transition-colors"
               />
+              {renderFieldError("dateFormed")}
             </div>
 
             {/* 3. Lokasi Team Game Startup */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div data-field="location" className={fieldCardClass("location")}>
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-2">
                 Lokasi Team Game Startup{" "}
                 <span className="text-[#E71C34]">*</span>
@@ -776,6 +933,7 @@ export default function MultiStepForm() {
                 placeholder="Jawaban Anda"
                 className="w-full bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#E71C34] transition-colors"
               />
+              {renderFieldError("location")}
             </div>
 
             {/* 4. Target platform utama untuk rilis game */}
@@ -805,7 +963,10 @@ export default function MultiStepForm() {
             </div>
 
             {/* 5. Website Game Startup */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div
+              data-field="startupWebsite"
+              className={fieldCardClass("startupWebsite")}
+            >
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-0.5">
                 Website Game Startup <span className="text-[#E71C34]">*</span>
               </label>
@@ -820,10 +981,11 @@ export default function MultiStepForm() {
                 placeholder="Jawaban Anda"
                 className="w-full bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#E71C34] transition-colors"
               />
+              {renderFieldError("startupWebsite")}
             </div>
 
             {/* 6. Genre Game */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div data-field="gameGenre" className={fieldCardClass("gameGenre")}>
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-0.5">
                 Genre Game <span className="text-[#E71C34]">*</span>
               </label>
@@ -858,6 +1020,7 @@ export default function MultiStepForm() {
                   className="mt-2.5 w-full bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-[#E71C34]"
                 />
               )}
+              {renderFieldError("gameGenre")}
             </div>
 
             {/* 7. Status perusahaan */}
@@ -912,9 +1075,15 @@ export default function MultiStepForm() {
             </div>
 
             {/* 9. Apabila tergabung dalam komunitas, komunitas mana? */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div
+              data-field="communityName"
+              className={fieldCardClass("communityName")}
+            >
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-2">
                 Apabila tergabung dalam komunitas, komunitas mana?
+                {formData.inCommunity === "Ya" && (
+                  <span className="text-[#E71C34]"> *</span>
+                )}
               </label>
               <input
                 type="text"
@@ -924,10 +1093,14 @@ export default function MultiStepForm() {
                 placeholder="Jawaban Anda"
                 className="w-full bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#E71C34] transition-colors"
               />
+              {renderFieldError("communityName")}
             </div>
 
             {/* 10. Apakah game startup pernah/mengikuti program lain? */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div
+              data-field="otherPrograms"
+              className={fieldCardClass("otherPrograms")}
+            >
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-0.5">
                 Apakah game startup pernah/mengikuti program lain? Apabila tidak, isi dengan &apos;-&apos;{" "}
                 <span className="text-[#E71C34]">*</span>
@@ -943,6 +1116,7 @@ export default function MultiStepForm() {
                 placeholder="Jawaban Anda"
                 className="w-full bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#E71C34] transition-colors"
               />
+              {renderFieldError("otherPrograms")}
             </div>
           </div>
         )}
@@ -958,7 +1132,10 @@ export default function MultiStepForm() {
             </div>
 
             {/* 1. Pitchdeck Startup (PDF Upload) */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-5">
+            <div
+              data-field="pitchdeckFile"
+              className={fieldCardClass("pitchdeckFile")}
+            >
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-0.5">
                 Pitchdeck Startup <span className="text-[#E71C34]">*</span>
               </label>
@@ -1023,6 +1200,7 @@ export default function MultiStepForm() {
                   </span>
                 </div>
               </div>
+              {renderFieldError("pitchdeckFile")}
             </div>
 
             {/* 2. Teaser Video Game */}
@@ -1070,17 +1248,20 @@ export default function MultiStepForm() {
         )}
 
         {/* ===================================================================
-            HALAMAN 5 DARI 5: PREFERENCE
+            HALAMAN 5 DARI 5: PREFERENCE & KONFIRMASI PENGIRIMAN
            =================================================================== */}
         {currentStep === 5 && (
           <div className="space-y-6">
             <div className="bg-[#E71C34] text-white px-4 py-3 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2">
               <Send className="w-4 h-4 shrink-0" />
-              <span>Preference</span>
+              <span>Preference &amp; Konfirmasi Pengiriman</span>
             </div>
 
             {/* Dari mana Anda mengetahui tentang Indigo Game? */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div
+              data-field="referralSource"
+              className={fieldCardClass("referralSource")}
+            >
               <label className="block text-xs sm:text-sm font-semibold text-gray-200 mb-3">
                 Dari mana Anda mengetahui tentang Indigo Game?{" "}
                 <span className="text-[#E71C34]">*</span>
@@ -1113,12 +1294,13 @@ export default function MultiStepForm() {
                   className="mt-2.5 w-full bg-[#141721] border border-[#252b3b] rounded-lg px-3.5 py-2 text-xs sm:text-sm text-white focus:outline-none focus:border-[#E71C34]"
                 />
               )}
+              {renderFieldError("referralSource")}
             </div>
 
             {/* Summary preview table */}
-            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-4">
+            <div className="bg-[#0b0c10] border border-[#252b3b] rounded-xl p-5">
               <h4 className="text-xs font-bold text-[#F2A900] uppercase tracking-wider mb-3">
-                Ringkasan Pendaftaran Sebelum Dikirim
+                Periksa Kembali Ringkasan Pendaftaran Anda
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
@@ -1173,6 +1355,35 @@ export default function MultiStepForm() {
                 </div>
               </div>
             </div>
+
+            {/* Checkbox Konfirmasi Pasti Pengirim Sebelum Dikirim */}
+            <div
+              data-field="confirmFinalSubmit"
+              className={fieldCardClass("confirmFinalSubmit")}
+            >
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="confirmFinalSubmit"
+                  checked={formData.confirmFinalSubmit}
+                  onChange={handleChange}
+                  className="mt-1 w-4 h-4 rounded text-[#E71C34] bg-gray-900 border-gray-700 focus:ring-[#E71C34]"
+                />
+                <span className="text-xs sm:text-sm text-gray-200">
+                  <strong>Konfirmasi Akhir Pengirim:</strong> Saya telah memeriksa ringkasan di atas dan memastikan seluruh data serta dokumen Pitch Deck yang dilampirkan sudah benar untuk dikirimkan.{" "}
+                  <span className="text-[#E71C34] font-bold">*</span>
+                </span>
+              </label>
+              {renderFieldError("confirmFinalSubmit")}
+            </div>
+          </div>
+        )}
+
+        {/* Error alert if any */}
+        {errorMsg && (
+          <div className="mt-6 p-3.5 rounded-xl bg-red-950/60 border border-red-800 text-red-200 flex items-center gap-2.5 text-xs">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <span>{errorMsg}</span>
           </div>
         )}
 
@@ -1181,6 +1392,7 @@ export default function MultiStepForm() {
           <div className="flex items-center gap-3">
             {currentStep > 1 && (
               <button
+                key="btn-prev"
                 type="button"
                 onClick={prevStep}
                 className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg border border-[#252b3b] hover:bg-white/5 text-xs sm:text-sm font-semibold text-gray-300 transition-colors"
@@ -1192,6 +1404,7 @@ export default function MultiStepForm() {
 
             {currentStep < 5 ? (
               <button
+                key="btn-next"
                 type="button"
                 onClick={nextStep}
                 className="inline-flex items-center gap-1.5 px-6 py-2.5 rounded-lg bg-[#E71C34] hover:bg-[#D3182E] text-xs sm:text-sm font-bold text-white transition-all shadow-lg shadow-[#E71C34]/25"
@@ -1201,6 +1414,7 @@ export default function MultiStepForm() {
               </button>
             ) : (
               <button
+                key="btn-submit"
                 type="submit"
                 disabled={loading}
                 className="inline-flex items-center gap-2 px-7 py-2.5 rounded-lg bg-[#E71C34] hover:bg-[#D3182E] text-xs sm:text-sm font-bold text-white transition-all shadow-xl shadow-[#E71C34]/30 disabled:opacity-50"
@@ -1213,7 +1427,7 @@ export default function MultiStepForm() {
                 ) : (
                   <>
                     <Send className="w-4 h-4" />
-                    Kirim
+                    Kirim Pendaftaran
                   </>
                 )}
               </button>
